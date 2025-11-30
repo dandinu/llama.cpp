@@ -2,16 +2,18 @@ set(TARGET cpp-httplib)
 
 find_package(Threads REQUIRED)
 
-add_library(${TARGET} STATIC httplib.cpp httplib.h)
-if (NOT MSVC)
-    # disable warnings in 3rd party code
-    target_compile_options(${TARGET} PRIVATE -w)
+# Version 0.15.3 is header-only
+add_library(${TARGET} INTERFACE)
+target_include_directories(${TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries  (${TARGET} INTERFACE Threads::Threads)
+# Link Winsock2 on Windows for socket functions
+if (WIN32)
+    target_link_libraries(${TARGET} INTERFACE ws2_32)
 endif()
+target_compile_features(${TARGET} INTERFACE cxx_std_17)
 
-target_link_libraries  (${TARGET} PRIVATE Threads::Threads)
-target_compile_features(${TARGET} PRIVATE cxx_std_17)
-
-target_compile_definitions(${TARGET} PRIVATE
+target_compile_definitions(${TARGET} INTERFACE
     # increase max payload length to allow use of larger context size
     CPPHTTPLIB_FORM_URL_ENCODED_PAYLOAD_MAX_LENGTH=1048576
     # increase backlog size to avoid connection resets for >> 1 slots
@@ -62,7 +64,7 @@ if (LLAMA_BUILD_BORINGSSL)
     set(BUILD_TESTING ${SAVED_BUILD_TESTING})
 
     set(CPPHTTPLIB_OPENSSL_SUPPORT TRUE)
-    target_link_libraries(${TARGET} PUBLIC ssl crypto)
+    target_link_libraries(${TARGET} INTERFACE ssl crypto)
 
 elseif (LLAMA_OPENSSL)
     find_package(OpenSSL)
@@ -87,7 +89,7 @@ elseif (LLAMA_OPENSSL)
         if (OPENSSL_VERSION_SUPPORTED)
             message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
             set(CPPHTTPLIB_OPENSSL_SUPPORT TRUE)
-            target_link_libraries(${TARGET} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+            target_link_libraries(${TARGET} INTERFACE OpenSSL::SSL OpenSSL::Crypto)
         endif()
     else()
         message(STATUS "OpenSSL not found, SSL support disabled")
@@ -95,11 +97,11 @@ elseif (LLAMA_OPENSSL)
 endif()
 
 if (CPPHTTPLIB_OPENSSL_SUPPORT)
-    target_compile_definitions(${TARGET} PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT) # used in server.cpp
+    target_compile_definitions(${TARGET} INTERFACE CPPHTTPLIB_OPENSSL_SUPPORT) # used in server.cpp
     if (APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-        target_compile_definitions(${TARGET} PRIVATE CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN)
+        target_compile_definitions(${TARGET} INTERFACE CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN)
         find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
         find_library(SECURITY_FRAMEWORK Security REQUIRED)
-        target_link_libraries(${TARGET} PUBLIC ${CORE_FOUNDATION_FRAMEWORK} ${SECURITY_FRAMEWORK})
+        target_link_libraries(${TARGET} INTERFACE ${CORE_FOUNDATION_FRAMEWORK} ${SECURITY_FRAMEWORK})
     endif()
 endif()

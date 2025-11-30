@@ -390,6 +390,31 @@ typedef pthread_t          ggml_thread_t;
 
 #if defined(_WIN32)
 
+// Windows XP (0x0502) doesn't have SRW locks (Vista+ only), use CRITICAL_SECTION instead
+#if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0600
+
+typedef HANDLE             ggml_cond_t;
+typedef CRITICAL_SECTION   ggml_mutex_t;
+
+#define ggml_mutex_init(m)          InitializeCriticalSection(m)
+#define ggml_mutex_destroy(m)       DeleteCriticalSection(m)
+#define ggml_mutex_lock(m)          EnterCriticalSection(m)
+#define ggml_mutex_unlock(m)        LeaveCriticalSection(m)
+#define ggml_mutex_lock_shared(m)   EnterCriticalSection(m)
+#define ggml_mutex_unlock_shared(m) LeaveCriticalSection(m)
+
+static void ggml_cond_init_impl(ggml_cond_t * c) { *c = CreateEvent(NULL, TRUE, FALSE, NULL); }
+static void ggml_cond_destroy_impl(ggml_cond_t * c) { CloseHandle(*c); }
+static void ggml_cond_wait_impl(ggml_cond_t * c, ggml_mutex_t * m) { LeaveCriticalSection(m); WaitForSingleObject(*c, INFINITE); EnterCriticalSection(m); ResetEvent(*c); }
+static void ggml_cond_broadcast_impl(ggml_cond_t * c) { SetEvent(*c); }
+
+#define ggml_cond_init(c)       ggml_cond_init_impl(c)
+#define ggml_cond_destroy(c)    ggml_cond_destroy_impl(c)
+#define ggml_cond_wait(c, m)    ggml_cond_wait_impl(c, m)
+#define ggml_cond_broadcast(c)  ggml_cond_broadcast_impl(c)
+
+#else // Vista and later
+
 typedef CONDITION_VARIABLE ggml_cond_t;
 typedef SRWLOCK            ggml_mutex_t;
 
@@ -404,6 +429,8 @@ typedef SRWLOCK            ggml_mutex_t;
 #define ggml_cond_destroy(c)
 #define ggml_cond_wait(c, m) SleepConditionVariableSRW(c, m, INFINITE, CONDITION_VARIABLE_LOCKMODE_SHARED)
 #define ggml_cond_broadcast(c) WakeAllConditionVariable(c)
+
+#endif // _WIN32_WINNT < 0x0600
 
 #define ggml_thread_create pthread_create
 #define ggml_thread_join   pthread_join
